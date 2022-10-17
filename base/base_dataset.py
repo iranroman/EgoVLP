@@ -302,6 +302,7 @@ def read_frames_cv2_epic(video_path, start_frame, stop_frame, num_frames, sample
     frames = []
     success_idxs = []
     for index in frame_idxs:
+        #img_name = 'frame_' + str(index+1).zfill(10) + '.png' # uncomment to run on CMU
         img_name = 'frame_' + str(index).zfill(10) + '.jpg'
         frame = cv2.imread(os.path.join(video_path, img_name),cv2.COLOR_BGR2RGB)
 

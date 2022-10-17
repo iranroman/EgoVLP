@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import transformers
 from sacred import Experiment
-sys.path.append("/apdcephfs/share_1367250/qinghonglin/video_codebase/EgoVLP")
+sys.path.append("/home/iran/EgoVLP")
 
 import torch
 import torch.nn.functional as F
@@ -68,6 +68,13 @@ def run():
     config._config['data_loader']['args']['shuffle'] = False
     config._config['data_loader']['args']['batch_size'] = args.batch_size
     config._config['data_loader']['args']['sliding_window_stride'] = args.sliding_window_stride
+    #config._config['data_loader']['args']['data_dir'] = '/datasets/cmu-mmac-rgb-frames'
+
+    #from data_loader.EpicKitchens_MIR_dataset import MultiInstanceRetrieval
+
+    #NAME = 'cmu_germany_sandwich'
+    #MultiInstanceRetrieval.NAME = NAME
+
 
     data_loader = config.initialize('data_loader', module_data)
 
@@ -105,7 +112,7 @@ def run():
     print(len(data_loader))
     with torch.no_grad():
         # for i, data in enumerate(data_loader):
-        for i, data in tqdm.tqdm(enumerate(data_loader)):
+        for i, data in tqdm.tqdm(enumerate(data_loader)):#, total=len(data_loader)):
             # leave this for now since not doing anything on the gpu
             if tokenizer is not None:
                 data['text'] = tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
@@ -123,15 +130,15 @@ def run():
     text_embeds = torch.cat(text_embed_arr)
 
     # considered unique narrations for evaluation of EPIC
-    path_dataframes = '/apdcephfs/private_qinghonglin/video_dataset/epic-kitchens/epic-kitchens-100-annotations-master/retrieval_annotations'
-    video_id=pd.read_csv(os.path.join(path_dataframes , "EPIC_100_retrieval_test.csv")).values[:,0]
-    text_id=pd.read_csv(os.path.join(path_dataframes , "EPIC_100_retrieval_test_sentence.csv")).values[:,0]
+    path_dataframes = 'epic-kitchens-100-annotations/retrieval_annotations'
+    video_id=pd.read_csv(os.path.join(path_dataframes , f"EPIC_100_retrieval_test.csv")).values[:,0]
+    text_id=pd.read_csv(os.path.join(path_dataframes , f"EPIC_100_retrieval_test_sentence.csv")).values[:,0]
 
     indexes=[]
     for elem in text_id:
         indexes.append(video_id.tolist().index(elem))
 
-    path_relevancy = "/apdcephfs/private_qinghonglin/video_dataset/epic-kitchens/epic-kitchens-100-annotations-master/retrieval_annotations/relevancy/caption_relevancy_EPIC_100_retrieval_test.pkl"
+    path_relevancy = f"epic-kitchens-100-annotations/retrieval_annotations/relevancy/caption_relevancy_EPIC_100_retrieval_test.pkl"
     pkl_file = open(path_relevancy, 'rb')
     relevancy = pickle.load(pkl_file)
 
@@ -163,7 +170,7 @@ if __name__ == '__main__':
     args.add_argument('-r', '--resume',
                       # default='/apdcephfs/private_qinghonglin/video_codebase/frozen-in-time-main/results_egoclip/EgoClip_M_EgoNCE_N_V_Neg_Seg_60/models/0510_10/checkpoint-epoch1.pth'
                       # default='/apdcephfs/private_qinghonglin/video_codebase/frozen-in-time-main/results/EgoClip_EPIC_16f_best_rel_01_margin_02/models/0512_01/checkpoint-epoch100.pth',
-                      default='/apdcephfs/private_qinghonglin/video_codebase/frozen-in-time-main/results/EgoClip_EPIC_16f_best_rel_01_margin_04_weight/models/0512_02/checkpoint-epoch100.pth',
+                      default='checkpoint/epic_mir_plus.pth',
                       help='path to latest checkpoint (default: None)')
     args.add_argument('-gpu', '--gpu', default=0, type=str,
                       help='indices of GPUs to enable (default: all)')

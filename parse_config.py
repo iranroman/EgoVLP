@@ -31,7 +31,7 @@ class ConfigParser:
             self.resume = Path(args.resume)
             resume_cfg_fname = self.resume.parent / 'config.json'
             if eval_mode == "epic":
-                resume_cfg_fname = Path('/apdcephfs/private_qinghonglin/video_codebase/EgoVLP/configs/eval/epic.json')
+                resume_cfg_fname = Path('configs/eval/epic.json')
             if eval_mode == "charades":
                 resume_cfg_fname = Path('/apdcephfs/private_qinghonglin/video_codebase/EgoVLP/configs/eval/charades.json')
             if eval_mode == "nlq":
@@ -110,6 +110,10 @@ class ConfigParser:
             if module_name == 'MultiDistTextVideoDataLoader' and param == 'args':
                 module_args[param] = self.args
 
+        #print('module',module)
+        #print('args', args)
+        #print('module args', module_args)
+        #input()
         return getattr(module, module_name)(*args, **module_args)
 
     def __getitem__(self, name):

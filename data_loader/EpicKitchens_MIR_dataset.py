@@ -120,7 +120,7 @@ if __name__ == "__main__":
         "loading": "lax"
         },
         data_dir="/apdcephfs/private_qinghonglin/video_dataset/epic-kitchens/epic-kitchens-rgb-frames",
-        meta_dir="/apdcephfs/private_qinghonglin/video_dataset/epic-kitchens/epic-kitchens-100-annotations-master/retrieval_annotations",
+        meta_dir="epic-kitchens-100-annotations-master/retrieval_annotations",
         tsfms=init_video_transform_dict()['test'],
         reader='cv2_epic',
         split='train'

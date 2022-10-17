@@ -30,7 +30,7 @@ class FrozenInTime(BaseModel):
         # pdb.set_trace()
         if self.text_params['model'].startswith('distilbert'):
             self.text_model = AutoModel.from_pretrained('distilbert-base-uncased',
-                   cache_dir='/apdcephfs/share_1367250/qinghonglin/video_codebase/frozen-in-time-main/pretrained/distilbert-base-uncased')
+                   cache_dir='/datasets/pretrained/distilbert-base-uncased')
         else:
             self.text_model = AutoModel.from_pretrained(text_params['model'])
         self.text_model.train()
@@ -43,8 +43,8 @@ class FrozenInTime(BaseModel):
             arch_config = video_params.get('arch_config', 'base_patch16_224')
             vit_init = video_params.get('vit_init', 'imagenet-21k')
             if arch_config == 'base_patch16_224':
-                # vit_model = timm.models.vision_transformer.vit_base_patch16_224(pretrained=pretrained)
-                vit_model = torch.load("/apdcephfs/share_1367250/qinghonglin/video_codebase/frozen-in-time-main/pretrained/jx_vit_base_p16_224-80ecf9dd.pth", map_location="cpu")
+                vit_model = timm.models.vision_transformer.vit_base_patch16_224(pretrained=pretrained)
+                #vit_model = torch.load("/datasets/pretrained/jx_vit_base_p16_224-80ecf9dd.pth", map_location="cpu")
                 model = SpaceTimeTransformer(num_frames=num_frames,
                                             time_init=time_init,
                                             attention_style=attention_style)
@@ -55,9 +55,9 @@ class FrozenInTime(BaseModel):
             model.pre_logits = nn.Identity()
             ftr_dim = model.embed_dim
             if load_checkpoint in ["", None]:
-                # vit_checkpoint = vit_model.state_dict()
-                # model.load_state_dict(vit_checkpoint, strict=False)
-                vit_checkpoint = vit_model
+                vit_checkpoint = vit_model.state_dict()
+                model.load_state_dict(vit_checkpoint, strict=False)
+                #vit_checkpoint = vit_model
                 new_vit_dict = state_dict_data_parallel_fix(vit_checkpoint, model.state_dict())
                 model.load_state_dict(new_vit_dict, strict=False)
             self.video_model = model
