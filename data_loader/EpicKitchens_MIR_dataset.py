@@ -25,8 +25,20 @@ class MultiInstanceRetrieval(TextVideoDataset):
             'val': 'EPIC_100_retrieval_test_sentence.csv',  # there is no test
             'test': 'EPIC_100_retrieval_test_sentence.csv'
         }
+        noun_verb_classes_files = {
+            'noun': '../EPIC_100_noun_classes.csv',
+            'verb': '../EPIC_100_verb_classes.csv',
+        }
         target_split_fp = split_files[self.split]
         metadata = pd.read_csv(os.path.join(self.meta_dir, target_split_fp))
+        df = pd.read_csv(os.path.join(self.meta_dir, noun_verb_classes_files['noun']))
+        df['key'] = df['key'].apply(lambda x: '{} {}'.format(x.split(':')[-1],' '.join(x.split(':')[:-1])) if ':' in x else x)
+        noun_classes_dict = pd.Series(df.instances.values,index=df.key).to_dict()
+        noun_classes_dict = {v:k for k,val in noun_classes_dict.items() for v in eval(val)}
+        df = pd.read_csv(os.path.join(self.meta_dir, noun_verb_classes_files['verb']))
+        verb_classes_dict = pd.Series(df.instances.values,index=df.key).to_dict()
+        verb_classes_dict = {v:k for k,val in verb_classes_dict.items() for v in eval(val)}
+        verb_classes_dict['bring-into'] = 'carry' # missing in the EK dict
 
         target_split_sentence_fp = split_files_sentence[self.split]
         metadata_sentence = pd.read_csv(os.path.join(self.meta_dir, target_split_sentence_fp))
@@ -42,6 +54,8 @@ class MultiInstanceRetrieval(TextVideoDataset):
 
         self.metadata = metadata
         self.metadata_sentence = metadata_sentence
+        self.noun_classes_dict = noun_classes_dict
+        self.verb_classes_dict = verb_classes_dict
 
     def _get_video_path(self, sample):
         rel_video_fp = sample[2]
@@ -60,7 +74,15 @@ class MultiInstanceRetrieval(TextVideoDataset):
             return sample[8], 1, 0
 
         elif self.split in ['val', 'test']:
-            return sample[8], 1, -1
+            verb_nouns = [sample[9]]
+            verb_nouns.extend(eval(sample[13]))
+            if self.text_params['normalize_labels']:
+                verb_norm = [self.verb_classes_dict[verb_nouns[0]]]     
+                nouns_norm = [self.noun_classes_dict[n] for n in verb_nouns[1:]]
+                verb_nouns = verb_norm
+                verb_nouns.extend(sorted(nouns_norm))
+                verb_nouns = ' '.join(verb_nouns)
+            return verb_nouns, 1, -1
 
     def __getitem__(self, item):
         item = item % len(self.metadata)
@@ -104,7 +126,7 @@ class MultiInstanceRetrieval(TextVideoDataset):
                              self.video_params['input_res']])
         final[:imgs.shape[0]] = imgs
 
-        meta_arr = {'raw_captions': caption, 'paths': item, 'dataset': self.dataset_name}
+        meta_arr = {'raw_captions': caption, 'paths': item, 'dataset': self.dataset_name, 'video_id': rel_fp}
         data = {'video': final, 'text': caption, 'meta': meta_arr, 'relation': relation, 'item_v': item, 'item_t': idx}
         return data
 

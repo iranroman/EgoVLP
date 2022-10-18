@@ -33,7 +33,8 @@
                     "batch_size": 4,
                     "split": "train",
                     "text_params": {
-                        "input": "text"
+                        "input": "text",
+                        "normalize_labels": true
                     },
                     "video_params": {
                         "input_res": 224,

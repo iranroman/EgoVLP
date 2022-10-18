@@ -102,7 +102,7 @@ class FrozenInTime(BaseModel):
             video_embeddings = self.compute_video(video_data)
             return video_embeddings
 
-        text_data = data['text']
+        text_data = data['text_tokenized']
         video_data = data['video']
 
         text_embeddings = self.compute_text(text_data)

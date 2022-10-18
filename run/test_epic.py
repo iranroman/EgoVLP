@@ -106,49 +106,93 @@ def run():
     model = model.to(device)
     model.eval()
 
+    # first compute the video embeddings
     meta_arr = []
     text_embed_arr = []
     vid_embed_arr = []
-    print(len(data_loader))
+    print('length of dataloader:',len(data_loader))
     with torch.no_grad():
         # for i, data in enumerate(data_loader):
         for i, data in tqdm.tqdm(enumerate(data_loader)):#, total=len(data_loader)):
-            # leave this for now since not doing anything on the gpu
+            ## leave this for now since not doing anything on the gpu
             if tokenizer is not None:
-                data['text'] = tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
-            data['text'] = {key: val.cuda() for key, val in data['text'].items()}
+                data['text_tokenized'] = tokenizer(data['text'], return_tensors='pt', padding=True, truncation=True)
+            data['text_tokenized'] = {key: val.cuda() for key, val in data['text_tokenized'].items()}
             if isinstance(data['video'], list):
                 data['video'] = [x.to(device) for x in data['video']]
             else:
                 data['video'] = data['video'].to(device)
 
             text_embed, vid_embed = model(data, return_embeds=True)
+            meta_arr.append({'noun_verbs':data['text'][0], 'video_id':data['meta']['video_id'][0]})
             vid_embed_arr.append(vid_embed.cpu().detach())
             text_embed_arr.append(text_embed.cpu().detach())
-
     vid_embeds = torch.cat(vid_embed_arr)
     text_embeds = torch.cat(text_embed_arr)
+    # now compute the text embeddings using the video 
+    # repeated video embeddings
+    unique_videos = list(set([a['video_id'] for a in meta_arr]))
+    unique_videos.sort()
+    # iterate over videos
+    similarity_matrix = []
+    for vid in unique_videos:
 
+        # compute a dictionary of available clip indices to
+        # calcualte the prototype embeddings
+        action_idxs = {}
+        text_idxs = {}
+        for idata, mdata in enumerate(meta_arr):
+            if mdata['noun_verbs'] not in action_idxs:
+                action_idxs[mdata['noun_verbs']] = []
+            if mdata['video_id'] != vid:
+                action_idxs[mdata['noun_verbs']].append(idata)
+            else:
+                text_idxs[mdata['noun_verbs']] = idata
+
+        # calculate each action's prototype embedding
+        action_prototype = {}
+        for k,v in action_idxs.items():
+            if v:
+                action_embeds = vid_embeds[v]
+                a_n = action_embeds.norm(dim=1)[:, None]
+                action_embeds /= torch.max(a_n, 1e-8 * torch.ones_like(a_n))
+                action_prototype[k] = torch.mean(action_embeds,dim=0,keepdim=True)
+            else:
+                print(f'no embeddings found for action "{k}" in video {vid}')
+                print('using the text embedding as the prototype')
+                action_prototype[k] = text_embeds[[text_idxs[k]]]
+                #print('using a prototype with random numbers')
+                #action_prototype[k] = torch.randn_like(vid_embed_arr[-1])
+
+        # compute the similarity for clips in the video
+        video_embeds = vid_embeds[[i for i,a in enumerate(meta_arr) if a['video_id'] == vid]]
+        prototype_embeds = torch.cat([action_prototype[a['noun_verbs']] for a in meta_arr])
+
+        similarity_matrix.append(sim_matrix(prototype_embeds,video_embeds).T)
+    similarity_matrix = np.concatenate(similarity_matrix).T
     # considered unique narrations for evaluation of EPIC
     path_dataframes = 'epic-kitchens-100-annotations/retrieval_annotations'
     video_id=pd.read_csv(os.path.join(path_dataframes , f"EPIC_100_retrieval_test.csv")).values[:,0]
-    text_id=pd.read_csv(os.path.join(path_dataframes , f"EPIC_100_retrieval_test_sentence.csv")).values[:,0]
+    # evaluation dataframe
+    df_eval = data_loader.dataset.metadata
+    df_eval['narration_norm'] = df_eval.apply(lambda x: '{} {}'.format(data_loader.dataset.verb_classes_dict[x.verb], ' '.join(sorted([data_loader.dataset.noun_classes_dict[n] for n in eval(x.all_nouns)]))), axis=1)
+    text_id = df_eval.drop_duplicates('narration_norm')[['narration_id','narration_norm']].values[:,0]
 
     indexes=[]
     for elem in text_id:
         indexes.append(video_id.tolist().index(elem))
 
-    path_relevancy = f"epic-kitchens-100-annotations/retrieval_annotations/relevancy/caption_relevancy_EPIC_100_retrieval_test.pkl"
+    path_relevancy = f"epic-kitchens-100-annotations/retrieval_annotations/relevancy/caption_relevancy_EPIC_100_retrieval_test_norm.pkl"
     pkl_file = open(path_relevancy, 'rb')
     relevancy = pickle.load(pkl_file)
 
-    if not args.dual_softmax:
-        similarity_matrix = (sim_matrix(text_embeds, vid_embeds) + 1) / 2
-    else:
-        # dual-softmax for better similarity scale
-        similarity_matrix = sim_matrix_mm(text_embeds, vid_embeds)
-        similarity_matrix = softmax_numpy(similarity_matrix / 500, dim=1) * similarity_matrix
-        similarity_matrix = softmax_numpy(similarity_matrix, dim=0)
+    #if not args.dual_softmax:
+    #    similarity_matrix = (sim_matrix(text_embeds, vid_embeds) + 1) / 2
+    #else:
+    #    # dual-softmax for better similarity scale
+    #    similarity_matrix = sim_matrix_mm(text_embeds, vid_embeds)
+    #    similarity_matrix = softmax_numpy(similarity_matrix / 500, dim=1) * similarity_matrix
+    #    similarity_matrix = softmax_numpy(similarity_matrix, dim=0)
     similarity_matrix = similarity_matrix.T[:, indexes]
 
     dataset = initialise_jpose_nDCG_values(relevancy)
@@ -168,8 +212,6 @@ if __name__ == '__main__':
     args = argparse.ArgumentParser(description='PyTorch Template')
 
     args.add_argument('-r', '--resume',
-                      # default='/apdcephfs/private_qinghonglin/video_codebase/frozen-in-time-main/results_egoclip/EgoClip_M_EgoNCE_N_V_Neg_Seg_60/models/0510_10/checkpoint-epoch1.pth'
-                      # default='/apdcephfs/private_qinghonglin/video_codebase/frozen-in-time-main/results/EgoClip_EPIC_16f_best_rel_01_margin_02/models/0512_01/checkpoint-epoch100.pth',
                       default='checkpoint/epic_mir_plus.pth',
                       help='path to latest checkpoint (default: None)')
     args.add_argument('-gpu', '--gpu', default=0, type=str,
